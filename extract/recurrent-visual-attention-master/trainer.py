@@ -1,4 +1,3 @@
-from math import exp
 import os
 import time
 import shutil
@@ -237,43 +236,40 @@ class Trainer:
                 locs = []
                 log_pi = []
                 baselines = []
-                logProbas = []
-
                 for t in range(self.num_glimpses - 1):
                     # forward pass through model
-                    h_t, l_t, b_t,log_probas, p = self.model(x, l_t, h_t)
+                    h_t, l_t, b_t, p = self.model(x, l_t, h_t)
 
                     # store
                     locs.append(l_t[0:9])
                     baselines.append(b_t)
                     log_pi.append(p)
-                    logProbas.append(log_probas)
+
                 # last iteration
                 h_t, l_t, b_t, log_probas, p = self.model(x, l_t, h_t, last=True)
                 log_pi.append(p)
                 baselines.append(b_t)
                 locs.append(l_t[0:9])
-                logProbas.append(log_probas)
+
                 # convert list to tensors and reshape
                 baselines = torch.stack(baselines).transpose(1, 0)
                 log_pi = torch.stack(log_pi).transpose(1, 0)
-                logProbas = torch.stack(logProbas).transpose(1,0)
+
                 # calculate reward
                 predicted = torch.max(log_probas, 1)[1]
-                R = (predicted.detach() == y).float() 
-                R = R.unsqueeze(1).repeat(1, self.num_glimpses) 
-                R += torch.sum(exp(logProbas)*logProbas,dim=-1)
+                R = (predicted.detach() == y).float()
+                R = R.unsqueeze(1).repeat(1, self.num_glimpses)
+
                 # compute losses for differentiable modules
                 loss_action = F.nll_loss(log_probas, y)
-                loss_baseline = F.mse_loss(baselines, R) 
+                loss_baseline = F.mse_loss(baselines, R)
 
                 # compute reinforce loss
                 # summed over timesteps and averaged across batch
                 adjusted_reward = R - baselines.detach()
                 loss_reinforce = torch.sum(-log_pi * adjusted_reward, dim=1)
                 loss_reinforce = torch.mean(loss_reinforce, dim=0)
-                # loss_reinforce2 = torch.sum(exp(logProbas)*logProbas,dim=1)
-                # loss_reinforce2 = torch.mean(loss_reinforce2,dim=0)
+
                 # sum up into a hybrid loss
                 loss = loss_action + loss_baseline + loss_reinforce * 0.01
 

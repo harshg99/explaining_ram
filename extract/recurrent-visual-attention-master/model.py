@@ -82,11 +82,8 @@ class RecurrentAttention(nn.Module):
         log_pi, l_t = self.locator(h_t)
         b_t = self.baseliner(h_t).squeeze()
 
-        log_probas = self.classifier(h_t)
-        return h_t, l_t, b_t, log_probas, log_pi
-        # if last:
-        #     log_probas = self.classifier(h_t)
-        #     return h_t, l_t, b_t, log_probas, log_pi
-        # else:
-        #     log_probas = self.classifier(h_t)
-        #     return h_t, l_t, b_t, log_pi
+        if last:
+            log_probas = self.classifier(h_t)
+            return h_t, l_t, b_t, log_probas, log_pi
+
+        return h_t, l_t, b_t, log_pi

@@ -310,8 +310,6 @@ class LocationNetwork(nn.Module):
 
         # reparametrization trick
         l_t = torch.distributions.Normal(mu, self.std).rsample()
-        # bound between [-1, 1]
-        l_t = torch.clamp(l_t, -1, 1)
         l_t = l_t.detach()
         log_pi = Normal(mu, self.std).log_prob(l_t)
 
@@ -320,7 +318,8 @@ class LocationNetwork(nn.Module):
         # 2. log of the product is the sum of the logs
         log_pi = torch.sum(log_pi, dim=1)
 
-        
+        # bound between [-1, 1]
+        l_t = torch.clamp(l_t, -1, 1)
 
         return log_pi, l_t
 
