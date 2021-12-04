@@ -126,9 +126,7 @@ def prepare_dirs(config):
 
 
 def save_config(config):
-    model_name = "ram_{}_{}x{}_{}".format(
-        config.num_glimpses, config.patch_size, config.patch_size, config.glimpse_scale
-    )
+    model_name = config.model_name
     filename = model_name + "_params.json"
     param_path = os.path.join(config.ckpt_dir, filename)
 

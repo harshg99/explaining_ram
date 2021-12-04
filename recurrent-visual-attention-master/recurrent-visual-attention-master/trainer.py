@@ -36,6 +36,9 @@ class Trainer:
         else:
             self.device = torch.device("cpu")
 
+        # Architecture Params
+        self.mode = config.mode
+
         # glimpse network params
         self.patch_size = config.patch_size
         self.glimpse_scale = config.glimpse_scale

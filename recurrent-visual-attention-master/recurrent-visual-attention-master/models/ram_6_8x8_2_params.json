@@ -26,7 +26,9 @@
     "shuffle": true,
     "std": 0.17,
     "train_patience": 50,
-    "use_gpu": false,
-    "use_tensorboard": false,
-    "valid_size": 0.1
+    "use_gpu": true,
+    "use_tensorboard": true,
+    "valid_size": 0.1,
+    "CoreNetworkType": "LSTM",
+    "Architecture" :
 }
