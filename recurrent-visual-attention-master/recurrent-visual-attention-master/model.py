@@ -11,7 +11,7 @@ class RecurrentAttention(nn.Module):
     """
 
     def __init__(
-        self, g, k, s, c, h_g, h_l, std, hidden_size, num_classes,
+        self, g, k, s, c, h_g, h_l, std, hidden_size, num_classes,corenet_type
     ):
         """
         """
@@ -20,10 +20,13 @@ class RecurrentAttention(nn.Module):
         self.std = std
 
         self.sensor = modules.GlimpseNetwork(h_g, h_l, g, k, s, c)
-        self.rnn = modules.CoreNetwork(hidden_size, hidden_size)
+        if corenet_type=="Linear":
+            self.rnn = modules.CoreNetwork(hidden_size, hidden_size)
+        elif corenet_type=="LSTM":
+            self.rnn = modules.CoreNetworkLSTM(hidden_size, hidden_size)
         self.locator = modules.LocationNetwork(hidden_size, 2, std)
         self.classifier = modules.ActionNetwork(hidden_size, num_classes)
-        self.baseliner = modules.Critic(hidden_size, 1)
+        self.critic = modules.Critic(hidden_size, 1)
 
     def forward(self, x, l_t_prev, h_t_prev, last=False):
         """Run RAM for one timestep on a minibatch of images.
@@ -32,10 +35,8 @@ class RecurrentAttention(nn.Module):
         h_t = self.rnn(g_t, h_t_prev)
 
         log_pi, l_t = self.locator(h_t)
-        b_t = self.baseliner(h_t).squeeze()
+        b_t = self.critic(h_t).squeeze()
 
-        if last:
-            log_probas = self.classifier(h_t)
-            return h_t, l_t, b_t, log_probas, log_pi
 
-        return h_t, l_t, b_t, log_pi
+        log_probas = self.classifier(h_t)
+        return h_t, l_t, b_t,log_pi, log_probas

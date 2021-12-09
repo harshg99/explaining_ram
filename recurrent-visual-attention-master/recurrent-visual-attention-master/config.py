@@ -15,7 +15,7 @@ def add_argument_group(name):
 
 # Architecture Params
 arch_param = add_argument_group("Architecture Params")
-arch_param.add_argument("--architecture params",type=str, default=mode, help="size of extracted patch at highest res"
+arch_param.add_argument("--mode",type=str, default=mode, help="size of extracted patch at highest res"
 )
 
 # glimpse network params
@@ -44,7 +44,9 @@ core_arg.add_argument(
 )
 core_arg.add_argument("--hidden_size", type=int, default=hidden_size, help="hidden size of rnn")
 
-
+core_arg.add_argument(
+    "--core_net_type", type=str, default=core_net_type, help="# of glimpses, i.e. BPTT iterations"
+)
 # reinforce params
 reinforce_arg = add_argument_group("Reinforce Params")
 reinforce_arg.add_argument(
@@ -115,7 +117,19 @@ train_arg.add_argument(
     help="Number of epochs to wait before stopping train",
 )
 
+train_arg.add_argument(
+    "--training_mode",
+    type=str,
+    default=training_mode,
+    help="Number of epochs to wait before stopping train",
+)
 
+train_arg.add_argument(
+    "--reward",
+    type=str,
+    default=reward,
+    help="Number of epochs to wait before stopping train",
+)
 # other params
 misc_arg = add_argument_group("Misc.")
 misc_arg.add_argument(

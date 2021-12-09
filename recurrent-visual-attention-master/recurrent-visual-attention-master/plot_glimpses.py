@@ -25,9 +25,9 @@ def main(plot_dir, epoch):
     glimpses = pickle.load(open(plot_dir + "g_{}.p".format(epoch), "rb"))
     locations = pickle.load(open(plot_dir + "l_{}.p".format(epoch), "rb"))
 
-    from ipdb import set_trace
+    #from ipdb import set_trace
 
-    set_trace()
+    #set_trace()
 
     glimpses = np.concatenate(glimpses)
 
@@ -65,8 +65,9 @@ def main(plot_dir, epoch):
     )
 
     # save as mp4
-    name = plot_dir + "epoch_{}.mp4".format(epoch)
-    anim.save(name, extra_args=["-vcodec", "h264", "-pix_fmt", "yuv420p"])
+    name = plot_dir + "epoch_{}.gif".format(epoch)
+
+    anim.save(name, writer = 'ffmpeg', fps = 3)
 
 
 if __name__ == "__main__":

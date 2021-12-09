@@ -8,7 +8,7 @@ import torch.nn.functional as F
 
 from tqdm import tqdm
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from tensorboard_logger import configure, log_value
+from torch.utils.tensorboard import SummaryWriter
 
 from model import RecurrentAttention
 from utils import AverageMeter
@@ -49,6 +49,7 @@ class Trainer:
         # core network params
         self.num_glimpses = config.num_glimpses
         self.hidden_size = config.hidden_size
+        self.core_net_type = config.core_net_type
 
         # reinforce params
         self.std = config.std
@@ -58,8 +59,8 @@ class Trainer:
         if config.is_train:
             self.train_loader = data_loader[0]
             self.valid_loader = data_loader[1]
-            self.num_train = len(self.train_loader.sampler.indices)
-            self.num_valid = len(self.valid_loader.sampler.indices)
+            self.num_train = len(self.train_loader.dataset)
+            self.num_valid = len(self.valid_loader.dataset)
         else:
             self.test_loader = data_loader
             self.num_test = len(self.test_loader.dataset)
@@ -71,6 +72,8 @@ class Trainer:
         self.start_epoch = 0
         self.momentum = config.momentum
         self.lr = config.init_lr
+        self.training_mode = config.training_mode
+        self.reward = config.reward
 
         # misc params
         self.best = config.best
@@ -84,12 +87,7 @@ class Trainer:
         self.resume = config.resume
         self.print_freq = config.print_freq
         self.plot_freq = config.plot_freq
-        self.model_name = "ram_{}_{}x{}_{}".format(
-            config.num_glimpses,
-            config.patch_size,
-            config.patch_size,
-            config.glimpse_scale,
-        )
+        self.model_name = config.model_name
 
         self.plot_dir = "./plots/" + self.model_name + "/"
         if not os.path.exists(self.plot_dir):
@@ -99,9 +97,7 @@ class Trainer:
         if self.use_tensorboard:
             tensorboard_dir = self.logs_dir + self.model_name
             print("[*] Saving tensorboard logs to {}".format(tensorboard_dir))
-            if not os.path.exists(tensorboard_dir):
-                os.makedirs(tensorboard_dir)
-            configure(tensorboard_dir)
+            self.writer = SummaryWriter(log_dir=tensorboard_dir)
 
         # build RAM model
         self.model = RecurrentAttention(
@@ -114,6 +110,7 @@ class Trainer:
             self.std,
             self.hidden_size,
             self.num_classes,
+            self.core_net_type
         )
         self.model.to(self.device)
 
@@ -239,40 +236,54 @@ class Trainer:
                 locs = []
                 log_pi = []
                 baselines = []
+                class_probs = []
                 for t in range(self.num_glimpses - 1):
                     # forward pass through model
-                    h_t, l_t, b_t, p = self.model(x, l_t, h_t)
+                    h_t, l_t, b_t, p, class_prob = self.model(x, l_t, h_t)
 
                     # store
                     locs.append(l_t[0:9])
                     baselines.append(b_t)
                     log_pi.append(p)
+                    class_probs.append(class_prob.detach())
 
                 # last iteration
-                h_t, l_t, b_t, log_probas, p = self.model(x, l_t, h_t, last=True)
+                h_t, l_t, b_t, p,log_probas = self.model(x, l_t, h_t, last=True)
                 log_pi.append(p)
                 baselines.append(b_t)
                 locs.append(l_t[0:9])
+                class_probs.append(log_probas.detach())
 
                 # convert list to tensors and reshape
                 baselines = torch.stack(baselines).transpose(1, 0)
                 log_pi = torch.stack(log_pi).transpose(1, 0)
+                class_probs = torch.stack(class_probs).transpose(1,0)
 
-                # calculate reward
+                # calculate the reward for correct classification
                 predicted = torch.max(log_probas, 1)[1]
                 R = (predicted.detach() == y).float()
                 R = R.unsqueeze(1).repeat(1, self.num_glimpses)
 
+                if self.reward=="logprob":
+                    class_probs_reward = torch.sum(-torch.exp(class_probs)*class_probs,dim = 2)
+                    class_probs_reward[:, 1:] = class_probs_reward[:, 0:-1] - class_probs_reward[:, 1:]
+                    class_probs_reward[:,0] = 2.3 - class_probs_reward[:,0]
+                    class_probs_reward.unsqueeze(0)
+                    R += 0.1*class_probs_reward
+
                 # compute losses for differentiable modules
                 loss_action = F.nll_loss(log_probas, y)
-                loss_baseline = F.mse_loss(baselines, R)
+
 
                 # compute reinforce loss
                 # summed over timesteps and averaged across batch
-                adjusted_reward = R - baselines.detach()
-                loss_reinforce = torch.sum(-log_pi * adjusted_reward, dim=1)
-                loss_reinforce = torch.mean(loss_reinforce, dim=0)
-
+                if self.training_mode=="default":
+                    loss_baseline = F.mse_loss(baselines, R)
+                    adjusted_reward = R - baselines.detach()
+                    loss_reinforce = torch.sum(-log_pi * adjusted_reward, dim=1)
+                    loss_reinforce = torch.mean(loss_reinforce, dim=0)
+                elif self.training_mode=="AC2":#TODO
+                    advantage = R + baselines.detach()
                 # sum up into a hybrid loss
                 loss = loss_action + loss_baseline + loss_reinforce * 0.01
 
@@ -315,8 +326,8 @@ class Trainer:
                 # log to tensorboard
                 if self.use_tensorboard:
                     iteration = epoch * len(self.train_loader) + i
-                    log_value("train_loss", losses.avg, iteration)
-                    log_value("train_acc", accs.avg, iteration)
+                    self.writer.add_scalar("train_loss", losses.avg, iteration)
+                    self.writer.add_scalar("train_acc", accs.avg, iteration)
 
             return losses.avg, accs.avg
 
@@ -340,22 +351,25 @@ class Trainer:
             # extract the glimpses
             log_pi = []
             baselines = []
+            class_probs = []
             for t in range(self.num_glimpses - 1):
                 # forward pass through model
-                h_t, l_t, b_t, p = self.model(x, l_t, h_t)
+                h_t, l_t, b_t, p, class_prob = self.model(x, l_t, h_t)
 
-                # store
                 baselines.append(b_t)
                 log_pi.append(p)
+                class_probs.append(class_prob)
 
             # last iteration
-            h_t, l_t, b_t, log_probas, p = self.model(x, l_t, h_t, last=True)
+            h_t, l_t, b_t, p, log_probas = self.model(x, l_t, h_t, last=True)
             log_pi.append(p)
             baselines.append(b_t)
+            class_probs.append(log_probas)
 
             # convert list to tensors and reshape
             baselines = torch.stack(baselines).transpose(1, 0)
             log_pi = torch.stack(log_pi).transpose(1, 0)
+            class_probs = torch.stack(class_probs).transpose(1, 0)
 
             # average
             log_probas = log_probas.view(self.M, -1, log_probas.shape[-1])
@@ -395,8 +409,8 @@ class Trainer:
             # log to tensorboard
             if self.use_tensorboard:
                 iteration = epoch * len(self.valid_loader) + i
-                log_value("valid_loss", losses.avg, iteration)
-                log_value("valid_acc", accs.avg, iteration)
+                self.writer.add_scalar("val_loss", losses.avg, iteration)
+                self.writer.add_scalar("val_acc", accs.avg, iteration)
 
         return losses.avg, accs.avg
 
@@ -425,10 +439,10 @@ class Trainer:
             # extract the glimpses
             for t in range(self.num_glimpses - 1):
                 # forward pass through model
-                h_t, l_t, b_t, p = self.model(x, l_t, h_t)
+                h_t, l_t, b_t, p,_ = self.model(x, l_t, h_t)
 
             # last iteration
-            h_t, l_t, b_t, log_probas, p = self.model(x, l_t, h_t, last=True)
+            h_t, l_t, b_t,  p ,log_probas= self.model(x, l_t, h_t, last=True)
 
             log_probas = log_probas.view(self.M, -1, log_probas.shape[-1])
             log_probas = torch.mean(log_probas, dim=0)
