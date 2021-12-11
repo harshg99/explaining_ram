@@ -214,3 +214,30 @@ class Critic(nn.Module):
     def forward(self, h_t):
         b_t = self.fc(h_t.detach())
         return b_t
+
+
+class Decoder(nn.Module):
+    """The Decoder of the network to see whether image is reconstructed
+        """
+
+    def __init__(self, input_size, latent_dim,output_size):
+        super().__init__()
+
+        self.mu_fc = nn.Linear(input_size, latent_dim)
+        self.var_fc = nn.Linear(input_size,latent_dim)
+        self.decode = nn.Linear(latent_dim,output_size)
+        self.relu = nn.ReLU()
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, h_t):
+        mu = self.relu(self.mu_fc(h_t.detach()))
+        logvar = self.relu(self.var_fc(h_t.detach()))
+        z = self.reparameterization(mu,logvar)
+        out = self.sigmoid(self.relu(self.decode(z)))
+        return out
+
+    def reparameterization(self, mean, log_var):
+        std = torch.exp(0.5 * log_var)
+        eps = torch.normal(0, 0.001, size=(std.size())).to('cuda')
+        z = mean + std * eps
+        return z

@@ -27,6 +27,8 @@ class RecurrentAttention(nn.Module):
         self.locator = modules.LocationNetwork(hidden_size, 2, std)
         self.classifier = modules.ActionNetwork(hidden_size, num_classes)
         self.critic = modules.Critic(hidden_size, 1)
+        #Decoder to understadnreconstruction to original image
+        self.decoder = modules.Decoder(hidden_size,16,784)
 
     def forward(self, x, l_t_prev, h_t_prev, last=False):
         """Run RAM for one timestep on a minibatch of images.
@@ -39,4 +41,7 @@ class RecurrentAttention(nn.Module):
 
 
         log_probas = self.classifier(h_t)
-        return h_t, l_t, b_t,log_pi, log_probas
+
+        decoded_output = self.decoder(h_t)
+
+        return h_t, l_t, b_t,log_pi, log_probas,decoded_output

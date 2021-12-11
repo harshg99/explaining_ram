@@ -237,23 +237,25 @@ class Trainer:
                 log_pi = []
                 baselines = []
                 class_probs = []
+                rc_images = []
                 for t in range(self.num_glimpses - 1):
                     # forward pass through model
-                    h_t, l_t, b_t, p, class_prob = self.model(x, l_t, h_t)
+                    h_t, l_t, b_t, p, class_prob,rc_image = self.model(x, l_t, h_t)
 
                     # store
                     locs.append(l_t[0:9])
                     baselines.append(b_t)
                     log_pi.append(p)
                     class_probs.append(class_prob.detach())
-
+                    rc_images.append(rc_image)
                 # last iteration
-                h_t, l_t, b_t, p,log_probas = self.model(x, l_t, h_t, last=True)
+                h_t, l_t, b_t, p,log_probas,rc_image = self.model(x, l_t, h_t, last=True)
+
                 log_pi.append(p)
                 baselines.append(b_t)
                 locs.append(l_t[0:9])
                 class_probs.append(log_probas.detach())
-
+                rc_images.append(rc_image)
                 # convert list to tensors and reshape
                 baselines = torch.stack(baselines).transpose(1, 0)
                 log_pi = torch.stack(log_pi).transpose(1, 0)
@@ -263,27 +265,34 @@ class Trainer:
                 predicted = torch.max(log_probas, 1)[1]
                 R = (predicted.detach() == y).float()
                 R = R.unsqueeze(1).repeat(1, self.num_glimpses)
+                R[:,0:self.num_glimpses-1] = 0
 
                 if self.reward=="logprob":
                     class_probs_reward = torch.sum(-torch.exp(class_probs)*class_probs,dim = 2)
                     class_probs_reward[:, 1:] = class_probs_reward[:, 0:-1] - class_probs_reward[:, 1:]
                     class_probs_reward[:,0] = 2.3 - class_probs_reward[:,0]
-                    class_probs_reward.unsqueeze(0)
-                    R += 0.1*class_probs_reward
+                    R += 0.5*class_probs_reward.detach()
 
+                # Discounting with  gamma = 1
+                discR = torch.sum(R, dim=1).unsqueeze(1).repeat(1,self.num_glimpses) - torch.cumsum(R, dim=1)
                 # compute losses for differentiable modules
                 loss_action = F.nll_loss(log_probas, y)
-
 
                 # compute reinforce loss
                 # summed over timesteps and averaged across batch
                 if self.training_mode=="default":
-                    loss_baseline = F.mse_loss(baselines, R)
-                    adjusted_reward = R - baselines.detach()
+                    loss_baseline = F.mse_loss(baselines, discR)
+                    adjusted_reward = discR - baselines.detach()
                     loss_reinforce = torch.sum(-log_pi * adjusted_reward, dim=1)
                     loss_reinforce = torch.mean(loss_reinforce, dim=0)
                 elif self.training_mode=="AC2":#TODO
-                    advantage = R + baselines.detach()
+                    advantage = torch.zeros(R.shape).to(self.device)
+                    loss_baseline = F.mse_loss(baselines, discR)
+                    advantage[:,:(self.num_glimpses-1)] = R[:,:(self.num_glimpses-1)] + baselines.detach()[:,1:self.num_glimpses] - baselines.detach()[:,0:(self.num_glimpses-1)]
+                    advantage[:,self.num_glimpses-1] = R[:,self.num_glimpses-1] - baselines.detach()[:,self.num_glimpses-1]
+                    loss_reinforce = torch.sum(-log_pi*advantage,dim=1)
+                    loss_reinforce = torch.mean(loss_reinforce,dim=0)
+
                 # sum up into a hybrid loss
                 loss = loss_action + loss_baseline + loss_reinforce * 0.01
 
@@ -328,7 +337,7 @@ class Trainer:
                     iteration = epoch * len(self.train_loader) + i
                     self.writer.add_scalar("train_loss", losses.avg, iteration)
                     self.writer.add_scalar("train_acc", accs.avg, iteration)
-
+                    self.writer.add_scalar("reconstrunction_loss",accs.avg,iteration)
             return losses.avg, accs.avg
 
     @torch.no_grad()
@@ -354,14 +363,14 @@ class Trainer:
             class_probs = []
             for t in range(self.num_glimpses - 1):
                 # forward pass through model
-                h_t, l_t, b_t, p, class_prob = self.model(x, l_t, h_t)
+                h_t, l_t, b_t, p, class_prob,_ = self.model(x, l_t, h_t)
 
                 baselines.append(b_t)
                 log_pi.append(p)
                 class_probs.append(class_prob)
 
             # last iteration
-            h_t, l_t, b_t, p, log_probas = self.model(x, l_t, h_t, last=True)
+            h_t, l_t, b_t, p, log_probas,_ = self.model(x, l_t, h_t, last=True)
             log_pi.append(p)
             baselines.append(b_t)
             class_probs.append(log_probas)

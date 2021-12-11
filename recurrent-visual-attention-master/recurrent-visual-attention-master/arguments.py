@@ -1,5 +1,5 @@
 # Architecture level Params: Soft attention Model
-mode = "HardAttRewardShaping" # HardAtt, HardAttLSTM,HardAttwRewardShaping, HardAttAC2 HardAttAC2RewardShaping HardAttAC2LSTMRewardShaping
+mode = "HardAttAC2RewardShaping" # HardAtt, HardAttLSTM,HardAttwRewardShaping, HardAttAC2 HardAttAC2RewardShaping HardAttAC2LSTMRewardShaping
 
 if mode=="HardAtt":
     core_net_type="Linear"
@@ -36,7 +36,7 @@ glimpse_hidden = 128 # Length of glimpse encoding
 
 
 #Core Network Params
-num_glimpses = 6 # Length of the recurrent network
+num_glimpses = 4 # Length of the recurrent network
 hidden_size = 256 # Hidden size of the RNN
 
 # reinforce params
@@ -52,7 +52,7 @@ shuffle = True # Whether to shuffle the train and valid indices",
 show_sample = False # Whether to visualize a sample grid of the data",
 
 # training params
-is_train = False #Whether to train or test the model
+is_train = True#Whether to train or test the model
 momentum = 0.5 #Nesterov momentum value
 epochs = 200 # of epochs to train for"
 init_lr = 3e-4 #Initial learning rate value
@@ -73,7 +73,7 @@ print_freq = 10 #How frequently to print training details",
 plot_freq = 1 #How frequently to plot glimpses
 
 # Name of the model
-version = "v1"
+version = "vr2"
 model_name = "ram_{}_{}x{}_{}_{}_m{}v_{}".format(
     num_glimpses, patch_size, patch_size, glimpse_scale,num_patches,mode,version
 )
