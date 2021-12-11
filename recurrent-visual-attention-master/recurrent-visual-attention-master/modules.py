@@ -241,3 +241,65 @@ class Decoder(nn.Module):
         eps = torch.normal(0, 0.001, size=(std.size())).to('cuda')
         z = mean + std * eps
         return z
+
+    # Reconstruction error module
+    def reconstruction_error(model, test_loader):
+        '''
+        Argms:
+        Input:
+            model: VAE model
+            test_loader: Fashion-MNIST test_loader
+        Output:
+            avg_err: MSE
+        '''
+        # set model to eval
+        ##################
+        # TODO:
+        model.eval()
+        ##################
+        # Initialize MSE Loss(use reduction='sum')
+        ##################
+        # TODO:
+        criterion = nn.MSELoss(reduction='sum')
+        ##################
+        recon_err = 0
+        idx_counter = 0
+        for i, (data, _) in enumerate(test_loader):
+            data = data.to(device)
+            # feed forward data to VAE
+            ##################
+            # TODO:
+            pred, mean, log_var = model(data)
+            ##################
+
+            idx_counter += data.shape[0]  # sum up the number of images in test_loader
+
+            # flatten the reconstruction output
+            ##################
+            pred = torch.flatten(pred)
+            data = torch.flatten(data)
+            ##################
+            # accumulate the MSELoss acrossing the whole test set
+            ##################
+            loss = criterion(pred, data)
+            # print(loss.shape)
+            recon_err += loss.item()
+            ##################
+
+        avg_err = recon_err / idx_counter
+        return avg_err
+
+    def loss_function(recon_x, x, mu, log_var):
+        '''
+        Compute reconstruction loss and KL divergence loss mentioned in pdf handout
+        '''
+        ################################
+        # Please compute BCE and KLD:
+        recon_x = recon_x.reshape(x.shape)
+        bce_loss = nn.BCELoss(reduction='sum')
+        BCE = bce_loss(recon_x.to("cuda"), x.to("cuda"))
+        KLD = 0.5 * torch.sum(torch.exp(log_var) - log_var - 1 + mu * mu)
+        ################################
+        totalloss = BCE + KLD
+
+        return totalloss, KLD.item(), BCE.item()
