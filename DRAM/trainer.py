@@ -1,4 +1,4 @@
-condaimport os
+import os
 import time
 import shutil
 import pickle

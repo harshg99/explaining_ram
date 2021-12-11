@@ -38,7 +38,7 @@ class RecurrentAttention(nn.Module):
         h_t = self.rnn(g_t, h_t_prev)
 
         log_pi, l_t = self.locator(h_t[1])
-        b_t = self.critic(h_t).squeeze()
+        b_t = self.critic(h_t[1]).squeeze()
 
 
         log_probas_1 = self.classifier1(h_t[0])
