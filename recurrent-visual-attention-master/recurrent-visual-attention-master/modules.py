@@ -351,3 +351,4 @@ class BaselineNetwork(nn.Module):
     def forward(self, h_t):
         b_t = self.fc(h_t.detach())
         return b_t
+

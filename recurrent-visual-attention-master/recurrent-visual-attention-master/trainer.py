@@ -3,6 +3,7 @@ import os
 import time
 import shutil
 import pickle
+import numpy as np
 
 import torch
 import torch.nn.functional as F
@@ -261,8 +262,9 @@ class Trainer:
                 # calculate reward
                 predicted = torch.max(log_probas, 1)[1]
                 R = (predicted.detach() == y).float() 
-                R = R.unsqueeze(1).repeat(1, self.num_glimpses) 
-                R += torch.sum(exp(logProbas)*logProbas,dim=-1)
+                R = R.unsqueeze(1).repeat(1, self.num_glimpses)
+                # print((torch.exp(logProbas)*logProbas,dim=-1)
+                R += torch.sum(torch.exp(logProbas)*logProbas,dim=-1)
                 # compute losses for differentiable modules
                 loss_action = F.nll_loss(log_probas, y)
                 loss_baseline = F.mse_loss(baselines, R) 
@@ -343,7 +345,7 @@ class Trainer:
             baselines = []
             for t in range(self.num_glimpses - 1):
                 # forward pass through model
-                h_t, l_t, b_t, p = self.model(x, l_t, h_t)
+                h_t, l_t, b_t, _,p = self.model(x, l_t, h_t)
 
                 # store
                 baselines.append(b_t)
