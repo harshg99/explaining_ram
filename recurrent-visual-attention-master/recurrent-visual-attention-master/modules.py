@@ -1,4 +1,5 @@
 import torch
+from torch._C import device
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -225,7 +226,11 @@ class Decoder(nn.Module):
 
         self.mu_fc = nn.Linear(input_size, latent_dim)
         self.var_fc = nn.Linear(input_size,latent_dim)
-        self.decode = nn.Linear(latent_dim,output_size)
+        self.decode = nn.Sequential(
+                    nn.Linear(latent_dim,output_size//8),
+                    nn.Tanh(),
+                    nn.Linear(output_size//8,output_size)
+        )
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
 
@@ -234,11 +239,11 @@ class Decoder(nn.Module):
         logvar = self.relu(self.var_fc(h_t.detach()))
         z = self.reparameterization(mu,logvar)
         out = self.sigmoid(self.relu(self.decode(z)))
-        return out
+        return mu,logvar,out
 
     def reparameterization(self, mean, log_var):
         std = torch.exp(0.5 * log_var)
-        eps = torch.normal(0, 0.001, size=(std.size())).to('cuda')
+        eps = torch.normal(0, 0.001, size=(std.size())).to(device)
         z = mean + std * eps
         return z
 
@@ -270,12 +275,9 @@ class Decoder(nn.Module):
             ##################
             # TODO:
             pred, mean, log_var = model(data)
-            ##################
 
-            idx_counter += data.shape[0]  # sum up the number of images in test_loader
+            idx_counter += data.shape[0]  
 
-            # flatten the reconstruction output
-            ##################
             pred = torch.flatten(pred)
             data = torch.flatten(data)
             ##################
@@ -293,13 +295,10 @@ class Decoder(nn.Module):
         '''
         Compute reconstruction loss and KL divergence loss mentioned in pdf handout
         '''
-        ################################
-        # Please compute BCE and KLD:
         recon_x = recon_x.reshape(x.shape)
         bce_loss = nn.BCELoss(reduction='sum')
-        BCE = bce_loss(recon_x.to("cuda"), x.to("cuda"))
-        KLD = 0.5 * torch.sum(torch.exp(log_var) - log_var - 1 + mu * mu)
-        ################################
+        BCE = bce_loss(recon_x.to(device), x.to(device))
+        KLD = -0.5 * torch.sum(-torch.exp(log_var) + log_var + 1 - mu**2)
         totalloss = BCE + KLD
 
-        return totalloss, KLD.item(), BCE.item()
+        return totalloss, KLD.detach().item(), BCE.detach().item()

@@ -12,7 +12,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from model import RecurrentAttention
 from utils import AverageMeter
-
+from modules import Decoder
 
 class Trainer:
     """A Recurrent Attention Model trainer.
@@ -114,10 +114,12 @@ class Trainer:
         )
         self.model.to(self.device)
 
+
         # initialize optimizer and scheduler
         self.optimizer = torch.optim.Adam(
             self.model.parameters(), lr=self.config.init_lr
         )
+        
         self.scheduler = ReduceLROnPlateau(
             self.optimizer, "min", patience=self.lr_patience
         )
@@ -238,9 +240,11 @@ class Trainer:
                 baselines = []
                 class_probs = []
                 rc_images = []
+                muList = []
+                logvarList = []
                 for t in range(self.num_glimpses - 1):
                     # forward pass through model
-                    h_t, l_t, b_t, p, class_prob,rc_image = self.model(x, l_t, h_t)
+                    h_t, l_t, b_t, p, class_prob,rc_image,mu,logvar = self.model(x, l_t, h_t)
 
                     # store
                     locs.append(l_t[0:9])
@@ -248,9 +252,13 @@ class Trainer:
                     log_pi.append(p)
                     class_probs.append(class_prob.detach())
                     rc_images.append(rc_image)
+                    muList.append(mu)
+                    logvarList.append(logvar)
                 # last iteration
-                h_t, l_t, b_t, p,log_probas,rc_image = self.model(x, l_t, h_t, last=True)
+                h_t, l_t, b_t, p,log_probas,rc_image,mu,logvar = self.model(x, l_t, h_t, last=True)
 
+                muList.append(mu)
+                logvarList.append(logvar)
                 log_pi.append(p)
                 baselines.append(b_t)
                 locs.append(l_t[0:9])
@@ -294,7 +302,7 @@ class Trainer:
                     loss_reinforce = torch.mean(loss_reinforce,dim=0)
 
                 # sum up into a hybrid loss
-                loss = loss_action + loss_baseline + loss_reinforce * 0.01
+                loss = loss_action + loss_baseline + loss_reinforce * 0.01 + self.model.decoder.loss_function(x,mu,logvar)
 
                 # compute accuracy
                 correct = (predicted == y).float()
