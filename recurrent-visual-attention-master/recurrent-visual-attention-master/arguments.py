@@ -71,7 +71,7 @@ epochs = 200 # of epochs to train for"
 init_lr = 3e-4 #Initial learning rate value
 lr_patience = 20 #Number of epochs to wait before reducing lr"
 train_patience = 50 #Number of epochs to wait before stopping train"
-
+vae_patience = 20 #epochs for traininig vae
 
 # other params
 use_gpu = True #Whether to run on the GPU

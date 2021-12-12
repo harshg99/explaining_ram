@@ -142,7 +142,20 @@ train_arg.add_argument(
     default=critic_weight,
     help="Number of epochs to wait before stopping train",
 )
+train_arg.add_argument(
+"--vae_patience",
+    type=str,
+    default=vae_patience,
+    help="Number of epochs to wait before starting training VAE"
 
+)
+
+train_arg.add_argument(
+    "--partial_vae",
+    type=str,
+    default=partial_vae,
+    help="Number of epochs to wait before starting training VAE"
+)
 # other params
 misc_arg = add_argument_group("Misc.")
 misc_arg.add_argument(
