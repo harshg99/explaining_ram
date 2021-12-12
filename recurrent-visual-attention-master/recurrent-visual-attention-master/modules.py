@@ -1,4 +1,5 @@
 import torch
+from torch._C import device
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -13,11 +14,16 @@ class PatchExtractor:
 
     """
 
+
     def __init__(self, g, k, s):
         self.g = g
         self.k = k
         self.s = s
+        if torch.cuda.is_available():
+            self.device = "cuda"
 
+        else:
+            self.device = "cpu"
     def extract_scaledpatches(self, x, l):
 
         phi = []
@@ -225,25 +231,33 @@ class Decoder(nn.Module):
 
         self.mu_fc = nn.Linear(input_size, latent_dim)
         self.var_fc = nn.Linear(input_size,latent_dim)
-        self.decode = nn.Linear(latent_dim,output_size)
+        self.decode = nn.Sequential(
+                    nn.Linear(latent_dim,output_size//8),
+                    nn.Tanh(),
+                    nn.Linear(output_size//8,output_size)
+        )
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
+        if torch.cuda.is_available():
+            self.device = "cuda"
+        else:
+            self.device = "cpu"
 
     def forward(self, h_t):
         mu = self.relu(self.mu_fc(h_t.detach()))
         logvar = self.relu(self.var_fc(h_t.detach()))
         z = self.reparameterization(mu,logvar)
         out = self.sigmoid(self.relu(self.decode(z)))
-        return out
+        return mu,logvar,out
 
     def reparameterization(self, mean, log_var):
         std = torch.exp(0.5 * log_var)
-        eps = torch.normal(0, 0.001, size=(std.size())).to('cuda')
+        eps = torch.normal(0, 0.001, size=(std.size())).to(self.device)
         z = mean + std * eps
         return z
 
     # Reconstruction error module
-    def reconstruction_error(model, test_loader):
+    def reconstruction_error(self,x,x_recons):
         '''
         Argms:
         Input:
@@ -254,52 +268,22 @@ class Decoder(nn.Module):
         '''
         # set model to eval
         ##################
-        # TODO:
-        model.eval()
         ##################
         # Initialize MSE Loss(use reduction='sum')
         ##################
         # TODO:
-        criterion = nn.MSELoss(reduction='sum')
-        ##################
-        recon_err = 0
-        idx_counter = 0
-        for i, (data, _) in enumerate(test_loader):
-            data = data.to(device)
-            # feed forward data to VAE
-            ##################
-            # TODO:
-            pred, mean, log_var = model(data)
-            ##################
+        x_recons = x_recons.view(x.shape)
+        criterion = nn.MSELoss(reduction='mean')(x_recons,x)
+        return criterion
 
-            idx_counter += data.shape[0]  # sum up the number of images in test_loader
-
-            # flatten the reconstruction output
-            ##################
-            pred = torch.flatten(pred)
-            data = torch.flatten(data)
-            ##################
-            # accumulate the MSELoss acrossing the whole test set
-            ##################
-            loss = criterion(pred, data)
-            # print(loss.shape)
-            recon_err += loss.item()
-            ##################
-
-        avg_err = recon_err / idx_counter
-        return avg_err
-
-    def loss_function(recon_x, x, mu, log_var):
+    def loss_function(self,recon_x, x, mu, log_var):
         '''
         Compute reconstruction loss and KL divergence loss mentioned in pdf handout
         '''
-        ################################
-        # Please compute BCE and KLD:
         recon_x = recon_x.reshape(x.shape)
-        bce_loss = nn.BCELoss(reduction='sum')
-        BCE = bce_loss(recon_x.to("cuda"), x.to("cuda"))
-        KLD = 0.5 * torch.sum(torch.exp(log_var) - log_var - 1 + mu * mu)
-        ################################
+        bce_loss = nn.BCELoss(reduction='mean')
+        BCE = bce_loss(recon_x.to(self.device), x.to(self.device))
+        KLD = -0.5 * torch.sum(-torch.exp(log_var) + log_var + 1 - mu**2)
         totalloss = BCE + KLD
 
-        return totalloss, KLD.item(), BCE.item()
+        return totalloss, KLD.detach().item(), BCE.detach().item()

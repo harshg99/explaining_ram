@@ -42,6 +42,6 @@ class RecurrentAttention(nn.Module):
 
         log_probas = self.classifier(h_t)
 
-        decoded_output = self.decoder(h_t)
+        mu,logvar,decoded_output = self.decoder(h_t)
 
-        return h_t, l_t, b_t,log_pi, log_probas,decoded_output
+        return h_t, l_t, b_t,log_pi, log_probas,decoded_output,mu,logvar
