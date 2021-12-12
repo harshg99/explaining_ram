@@ -473,9 +473,9 @@ class Trainer:
             testrecx = torch.stack(testrecx).transpose(1,0)
             x = x.unsqueeze(dim=1).repeat((1,self.num_glimpses,1,1,1))
             # runningRecError = self.model.decoder.reconstruction_error(x,rec_x)
-            rec_x = rec_x.view((rec_x.shape[0],1,-1))
+            testrecx = testrecx.view((testrecx.shape[0],testrecx.shape[1],-1))
             x = x.view((x.shape[0],x.shape[1],-1))
-            err = torch.mean(torch.sum((rec_x - x)**2,dim=-1),dim=0)
+            err = torch.mean(torch.norm((testrecx - x)**2,dim=-1),dim=0)
             runningRecError += err
             log_probas = log_probas.view(self.M, -1, log_probas.shape[-1])
             log_probas = torch.mean(log_probas, dim=0)
