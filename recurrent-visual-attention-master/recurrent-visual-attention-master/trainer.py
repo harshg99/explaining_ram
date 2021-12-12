@@ -77,7 +77,7 @@ class Trainer:
         self.critic_weight = config.critic_weight
         self.actor_weight = config.actor_weight
         self.partial_vae = config.partial_vae
-      q  self.vae_patience = config.vae_patience
+        self.vae_patience = config.vae_patience
 
         # misc params
         self.best = config.best
