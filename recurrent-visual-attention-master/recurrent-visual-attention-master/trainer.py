@@ -2,10 +2,10 @@ import os
 import time
 import shutil
 import pickle
-
+import matplotlib.pyplot as plt
 import torch
 import torch.nn.functional as F
-
+import numpy as np
 from tqdm import tqdm
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.tensorboard import SummaryWriter
@@ -268,7 +268,9 @@ class Trainer:
                 baselines = torch.stack(baselines).transpose(1, 0)
                 log_pi = torch.stack(log_pi).transpose(1, 0)
                 class_probs = torch.stack(class_probs).transpose(1,0)
-
+                muList = torch.stack(muList).transpose(1,0)
+                logvarList = torch.stack(logvarList).transpose(1,0)
+                rc_images = torch.stack(rc_images).transpose(1,0)
                 # calculate the reward for correct classification
                 predicted = torch.max(log_probas, 1)[1]
                 R = (predicted.detach() == y).float()
@@ -302,7 +304,8 @@ class Trainer:
                     loss_reinforce = torch.mean(loss_reinforce,dim=0)
 
                 # sum up into a hybrid loss
-                loss = loss_action + loss_baseline + loss_reinforce * 0.01 + self.model.decoder.loss_function(x,mu,logvar)
+                x = x.unsqueeze(dim=1).repeat((1,self.num_glimpses,1,1,1))
+                loss = loss_action + loss_baseline + loss_reinforce * 0.01 + self.model.decoder.loss_function(rc_images,x,muList,logvarList)[0]
 
                 # compute accuracy
                 correct = (predicted == y).float()
@@ -339,13 +342,14 @@ class Trainer:
                     pickle.dump(
                         locs, open(self.plot_dir + "l_{}.p".format(epoch + 1), "wb")
                     )
-
+                
                 # log to tensorboard
                 if self.use_tensorboard:
                     iteration = epoch * len(self.train_loader) + i
                     self.writer.add_scalar("train_loss", losses.avg, iteration)
                     self.writer.add_scalar("train_acc", accs.avg, iteration)
-                    self.writer.add_scalar("reconstrunction_loss",accs.avg,iteration)
+                    self.writer.add_scalar("reconstrunction_loss",self.model.decoder.reconstruction_error(rc_images,x),iteration)
+
             return losses.avg, accs.avg
 
     @torch.no_grad()
@@ -371,14 +375,14 @@ class Trainer:
             class_probs = []
             for t in range(self.num_glimpses - 1):
                 # forward pass through model
-                h_t, l_t, b_t, p, class_prob,_ = self.model(x, l_t, h_t)
+                h_t, l_t, b_t, p, class_prob,_,_,_ = self.model(x, l_t, h_t)
 
                 baselines.append(b_t)
                 log_pi.append(p)
                 class_probs.append(class_prob)
 
             # last iteration
-            h_t, l_t, b_t, p, log_probas,_ = self.model(x, l_t, h_t, last=True)
+            h_t, l_t, b_t, p, log_probas,_ ,_,_= self.model(x, l_t, h_t, last=True)
             log_pi.append(p)
             baselines.append(b_t)
             class_probs.append(log_probas)
@@ -442,7 +446,7 @@ class Trainer:
 
         # load the best checkpoint
         self.load_checkpoint(best=self.best)
-
+        runningRecError = np.zeros((6,))
         for i, (x, y) in enumerate(self.test_loader):
             x, y = x.to(self.device), y.to(self.device)
 
@@ -452,14 +456,28 @@ class Trainer:
             # initialize location vector and hidden state
             self.batch_size = x.shape[0]
             h_t, l_t = self.reset()
-
+            testmu = []
+            testlogvar = []
+            testrecx= []
+            mseRec = np.zeros((6,))
             # extract the glimpses
             for t in range(self.num_glimpses - 1):
                 # forward pass through model
-                h_t, l_t, b_t, p,_ = self.model(x, l_t, h_t)
-
+                h_t, l_t, b_t, p,log_probas,rec_x,mu,logvar = self.model(x, l_t, h_t)
+                testmu.append(mu)
+                testlogvar.append(logvar)
+                testrecx.append(rec_x)
+                loss = self.model.decoder.reconstruction_error(x,rec_x)
+                mseRec.append(loss)
             # last iteration
-            h_t, l_t, b_t,  p ,log_probas= self.model(x, l_t, h_t, last=True)
+            h_t, l_t, b_t,  p ,log_probas,rec_x,mu,logvar = self.model(x, l_t, h_t, last=True)
+            loss = self.model.decoder.reconstruction_error(x,rec_x)
+            mseRec.append(loss)
+            mseRec = np.array(mseRec)
+            runningRecError+=mseRec
+            testmu.append(mu)
+            testlogvar.append(logvar)
+            testrecx.append(rec_x)
 
             log_probas = log_probas.view(self.M, -1, log_probas.shape[-1])
             log_probas = torch.mean(log_probas, dim=0)
@@ -467,6 +485,9 @@ class Trainer:
             pred = log_probas.data.max(1, keepdim=True)[1]
             correct += pred.eq(y.data.view_as(pred)).cpu().sum()
 
+        plt.plot(runningRecError/len(self.test_loader))
+        plt.xlabel("Number of glimpses")
+        plt.ylabel("Reconstruction error")
         perc = (100.0 * correct) / (self.num_test)
         error = 100 - perc
         print(

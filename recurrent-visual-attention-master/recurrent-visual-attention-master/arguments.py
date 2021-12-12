@@ -1,5 +1,5 @@
 # Architecture level Params: Soft attention Model
-mode = "HardAttAC2RewardShaping" # HardAtt, HardAttLSTM,HardAttwRewardShaping, HardAttAC2 HardAttAC2RewardShaping HardAttAC2LSTMRewardShaping
+mode = "HardAttRewardShaping" # HardAtt, HardAttLSTM,HardAttwRewardShaping, HardAttAC2 HardAttAC2RewardShaping HardAttAC2LSTMRewardShaping
 
 if mode=="HardAtt":
     core_net_type="Linear"

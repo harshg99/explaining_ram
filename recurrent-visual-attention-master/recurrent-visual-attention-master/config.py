@@ -99,7 +99,7 @@ train_arg.add_argument(
     "--momentum", type=float, default=momentum, help="Nesterov momentum value"
 )
 train_arg.add_argument(
-    "--epochs", type=int, default=epochs, help="# of epochs to train for"
+    "--epochs", type=int, default=10, help="# of epochs to train for"
 )
 train_arg.add_argument(
     "--init_lr", type=float, default=init_lr, help="Initial learning rate value"
