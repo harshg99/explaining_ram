@@ -130,6 +130,19 @@ train_arg.add_argument(
     default=reward,
     help="Number of epochs to wait before stopping train",
 )
+train_arg.add_argument(
+    "--actor_weight",
+    type=str,
+    default=actor_weight,
+    help="Number of epochs to wait before stopping train",
+)
+train_arg.add_argument(
+    "--critic_weight",
+    type=str,
+    default=critic_weight,
+    help="Number of epochs to wait before stopping train",
+)
+
 # other params
 misc_arg = add_argument_group("Misc.")
 misc_arg.add_argument(

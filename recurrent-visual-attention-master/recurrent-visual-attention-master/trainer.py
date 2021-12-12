@@ -74,6 +74,8 @@ class Trainer:
         self.lr = config.init_lr
         self.training_mode = config.training_mode
         self.reward = config.reward
+        self.critic_weight = config.critic_weight
+        self.actor_weight = config.actor_weight
 
         # misc params
         self.best = config.best
@@ -274,7 +276,9 @@ class Trainer:
                     R += 0.5*class_probs_reward.detach()
 
                 # Discounting with  gamma = 1
-                discR = torch.sum(R, dim=1).unsqueeze(1).repeat(1,self.num_glimpses) - torch.cumsum(R, dim=1)
+                discR = torch.sum(R, dim=1).unsqueeze(1).repeat(1,self.num_glimpses)
+                disccumSum = torch.cumsum(R,dim=1)
+                discR[:,1:] = discR[:,1:] - disccumSum[:,0:-1]
                 # compute losses for differentiable modules
                 loss_action = F.nll_loss(log_probas, y)
 
@@ -294,7 +298,7 @@ class Trainer:
                     loss_reinforce = torch.mean(loss_reinforce,dim=0)
 
                 # sum up into a hybrid loss
-                loss = loss_action + loss_baseline + loss_reinforce * 0.01
+                loss = loss_action + self.critic_weight * loss_baseline + loss_reinforce * self.actor_weight
 
                 # compute accuracy
                 correct = (predicted == y).float()

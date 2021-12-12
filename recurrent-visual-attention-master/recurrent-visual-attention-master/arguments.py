@@ -1,30 +1,43 @@
 # Architecture level Params: Soft attention Model
-mode = "HardAttAC2RewardShaping" # HardAtt, HardAttLSTM,HardAttwRewardShaping, HardAttAC2 HardAttAC2RewardShaping HardAttAC2LSTMRewardShaping
+mode = "HardAttRewardShaping" # HardAtt, HardAttLSTM,HardAttwRewardShaping, HardAttAC2 HardAttAC2RewardShaping HardAttAC2LSTMRewardShaping
+
 
 if mode=="HardAtt":
     core_net_type="Linear"
     training_mode="default"
     reward = "default"
+    critic_weight = 1.0
+    actor_weight = 0.02
 elif mode=="HardAttLSTM":
     core_net_type="LSTM"
     training_mode="default"
     reward= "default"
+    critic_weight = 1.0
+    actor_weight = 0.02
 elif mode=="HardAttRewardShaping":
     core_net_type = "Linear"
     training_mode = "default"
     reward = "logprob"
+    critic_weight = 1.0
+    actor_weight = 0.02
 elif mode=="HardAttAC2":
     core_net_type = "Linear"
     training_mode = "AC2"
     reward = "default"
+    critic_weight = 0.4
+    actor_weight = 0.05
 elif mode=="HardAttAC2RewardShaping":
     core_net_type = "Linear"
     training_mode = "AC2"
     reward = "logprob"
+    critic_weight = 0.4
+    actor_weight = 0.05
 elif mode=="HardAttAC2LSTMRewardShaping":
     core_net_type = "LSTM"
     training_mode = "AC2"
     reward = "logprob"
+    critic_weight = 0.4
+    actor_weight = 0.05
 
 
 #Location Network Params
