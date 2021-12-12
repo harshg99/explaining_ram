@@ -52,7 +52,7 @@ shuffle = True # Whether to shuffle the train and valid indices",
 show_sample = False # Whether to visualize a sample grid of the data",
 
 # training params
-is_train = True#Whether to train or test the model
+is_train = False #Whether to train or test the model
 momentum = 0.5 #Nesterov momentum value
 epochs = 200 # of epochs to train for"
 init_lr = 3e-4 #Initial learning rate value

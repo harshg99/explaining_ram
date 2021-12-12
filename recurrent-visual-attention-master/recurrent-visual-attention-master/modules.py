@@ -275,30 +275,6 @@ class Decoder(nn.Module):
         x_recons = x_recons.view(x.shape)
         criterion = nn.MSELoss(reduction='mean')(x_recons,x)
         return criterion
-        ##################
-        # recon_err = 0
-        # idx_counter = 0
-        # for i, (data, _) in enumerate(test_loader):
-        #     data = data.to(device)
-        #     # feed forward data to VAE
-        #     ##################
-        #     # TODO:
-        #     pred, mean, log_var = model(data)
-
-        #     idx_counter += data.shape[0]  
-
-        #     pred = torch.flatten(pred)
-        #     data = torch.flatten(data)
-        #     ##################
-        #     # accumulate the MSELoss acrossing the whole test set
-        #     ##################
-        #     loss = criterion(pred, data)
-        #     # print(loss.shape)
-        #     recon_err += loss.item()
-        #     ##################
-
-        # avg_err = recon_err / idx_counter
-        # return avg_err
 
     def loss_function(self,recon_x, x, mu, log_var):
         '''

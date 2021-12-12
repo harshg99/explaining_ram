@@ -446,10 +446,10 @@ class Trainer:
 
         # load the best checkpoint
         self.load_checkpoint(best=self.best)
-        runningRecError = np.zeros((6,))
+        runningRecError = torch.zeros(self.num_glimpses)
         for i, (x, y) in enumerate(self.test_loader):
             x, y = x.to(self.device), y.to(self.device)
-
+            err = torch.zeros(self.num_glimpses)
             # duplicate M times
             x = x.repeat(self.M, 1, 1, 1)
 
@@ -459,7 +459,6 @@ class Trainer:
             testmu = []
             testlogvar = []
             testrecx= []
-            mseRec = np.zeros((6,))
             # extract the glimpses
             for t in range(self.num_glimpses - 1):
                 # forward pass through model
@@ -467,18 +466,17 @@ class Trainer:
                 testmu.append(mu)
                 testlogvar.append(logvar)
                 testrecx.append(rec_x)
-                loss = self.model.decoder.reconstruction_error(x,rec_x)
-                mseRec.append(loss)
             # last iteration
             h_t, l_t, b_t,  p ,log_probas,rec_x,mu,logvar = self.model(x, l_t, h_t, last=True)
             loss = self.model.decoder.reconstruction_error(x,rec_x)
-            mseRec.append(loss)
-            mseRec = np.array(mseRec)
-            runningRecError+=mseRec
-            testmu.append(mu)
-            testlogvar.append(logvar)
             testrecx.append(rec_x)
-
+            testrecx = torch.stack(testrecx).transpose(1,0)
+            x = x.unsqueeze(dim=1).repeat((1,self.num_glimpses,1,1,1))
+            # runningRecError = self.model.decoder.reconstruction_error(x,rec_x)
+            rec_x = rec_x.view((rec_x.shape[0],1,-1))
+            x = x.view((x.shape[0],x.shape[1],-1))
+            err = torch.mean(torch.sum((rec_x - x)**2,dim=-1),dim=0)
+            runningRecError += err
             log_probas = log_probas.view(self.M, -1, log_probas.shape[-1])
             log_probas = torch.mean(log_probas, dim=0)
 
@@ -488,6 +486,7 @@ class Trainer:
         plt.plot(runningRecError/len(self.test_loader))
         plt.xlabel("Number of glimpses")
         plt.ylabel("Reconstruction error")
+        plt.show()
         perc = (100.0 * correct) / (self.num_test)
         error = 100 - perc
         print(
