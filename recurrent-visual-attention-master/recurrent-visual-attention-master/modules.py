@@ -24,14 +24,16 @@ class PatchExtractor:
 
         else:
             self.device = "cpu"
-    def extract_scaledpatches(self, x, l):
+    def extract_scaledpatches(self, x, l,masks=None):
 
         phi = []
         size = self.g
-
+        mask = []
         # extract k patches of increasing size
         for i in range(self.k):
-            phi.append(self.extract_patch(x, l, size))
+            phi_,mask_ = self.extract_patch(x, l, size)
+            phi.append(phi_)
+            mask.append(mask_)
             size = int(self.s * size)
 
         # resize the patches to squares of size g
@@ -41,9 +43,15 @@ class PatchExtractor:
 
         # concatenate into a single tensor and flatten
         phi = torch.cat(phi, 1)
+        mask = torch.cat(mask,1)
+        mask = mask.sum(dim=1).clamp(0,1)
         phi = phi.view(phi.shape[0], -1)
-
-        return phi
+        mask = mask.view(mask.shape[0],-1)
+        if masks is not None:
+            masks+=mask
+            masks = masks.clamp(0, 1)
+            return phi,masks
+        return phi,mask
 
     def extract_patch(self, x, l, size):
         """Extract a single patch for each image in `x`.
@@ -58,9 +66,12 @@ class PatchExtractor:
 
         # loop through mini-batch and extract patches
         patch = []
+
+        masks  = torch.zeros(x.shape)
         for i in range(B):
             patch.append(x[i, :, start[i, 1] : end[i, 1], start[i, 0] : end[i, 0]])
-        return torch.stack(patch)
+            masks[i, :, start[i, 1] : end[i, 1], start[i, 0] : end[i, 0]]+=1
+        return torch.stack(patch),masks[:,:,size//2:size//2+H,size//2:size//2+W]
 
     def denormalize(self, T, coords):
         """Convert coordinates in the range [-1, 1] to
@@ -99,9 +110,9 @@ class GlimpseNetwork(nn.Module):
         self.fc3 = nn.Linear(h_g, h_g + h_l)
         self.fc4 = nn.Linear(h_l, h_g + h_l)
 
-    def forward(self, x, l_t_prev):
+    def forward(self, x, l_t_prev,masks = None):
         # generate glimpse phi from image x
-        phi = self.retina.extract_scaledpatches(x, l_t_prev)
+        phi,masks = self.retina.extract_scaledpatches(x, l_t_prev,masks)
 
         # flatten location vector
         l_t_prev = l_t_prev.view(l_t_prev.size(0), -1)
@@ -116,7 +127,7 @@ class GlimpseNetwork(nn.Module):
         # feed to fc layer
         g_t = F.relu(what + where)
 
-        return g_t
+        return g_t,masks
 
 class CoreNetworkLSTM(nn.Module):
     """The core network in LSTM.
@@ -283,6 +294,73 @@ class Decoder(nn.Module):
         recon_x = recon_x.reshape(x.shape)
         bce_loss = nn.BCELoss(reduction='mean')
         BCE = bce_loss(recon_x.to(self.device), x.to(self.device))
+        KLD = -0.5 * torch.sum(-torch.exp(log_var) + log_var + 1 - mu**2)
+        totalloss = BCE + KLD
+
+        return totalloss, KLD.detach().item(), BCE.detach().item()
+
+class PartialDecoder(nn.Module):
+    """The Decoder of the network to see whether image is reconstructed
+        """
+
+    def __init__(self, input_size, latent_dim,output_size):
+        super().__init__()
+
+        self.mu_fc = nn.Linear(input_size, latent_dim)
+        self.var_fc = nn.Linear(input_size,latent_dim)
+        self.decode = nn.Sequential(
+                    nn.Linear(latent_dim,output_size//8),
+                    nn.Tanh(),
+                    nn.Linear(output_size//8,output_size)
+        )
+        self.relu = nn.ReLU()
+        self.sigmoid = nn.Sigmoid()
+        if torch.cuda.is_available():
+            self.device = "cuda"
+        else:
+            self.device = "cpu"
+
+    def forward(self, h_t,masks = None):
+        mu = self.relu(self.mu_fc(h_t.detach()))
+        logvar = self.relu(self.var_fc(h_t.detach()))
+        z = self.reparameterization(mu,logvar)
+        out = self.sigmoid(self.relu(self.decode(z)))
+        self.masks = masks
+        return mu,logvar,out
+
+    def reparameterization(self, mean, log_var):
+        std = torch.exp(0.5 * log_var)
+        eps = torch.normal(0, 0.001, size=(std.size())).to(self.device)
+        z = mean + std * eps
+        return z
+
+    # Reconstruction error module
+    def reconstruction_error(self,x,x_recons):
+        '''
+        Argms:
+        Input:
+            model: VAE model
+            test_loader: Fashion-MNIST test_loader
+        Output:
+            avg_err: MSE
+        '''
+        # set model to eval
+        ##################
+        ##################
+        # Initialize MSE Loss(use reduction='sum')
+        ##################
+        # TODO:
+        x_recons = x_recons.view(x.shape)
+        criterion = nn.MSELoss(reduction='mean')(x_recons,x)
+        return criterion
+
+    def loss_function(self,recon_x, x, mu, log_var):
+        '''
+        Compute reconstruction loss and KL divergence loss mentioned in pdf handout
+        '''
+        recon_x = recon_x.reshape(x.shape)
+        bce_loss = nn.BCELoss(reduction='mean')
+        BCE = bce_loss(self.masks.to(self.device)*recon_x.to(self.device), self.masks.to(self.device)*x.to(self.device))
         KLD = -0.5 * torch.sum(-torch.exp(log_var) + log_var + 1 - mu**2)
         totalloss = BCE + KLD
 

@@ -246,9 +246,11 @@ class Trainer:
                 rc_images = []
                 muList = []
                 logvarList = []
+                masks = None
+                masks_glimpse =[]
                 for t in range(self.num_glimpses - 1):
                     # forward pass through model
-                    h_t, l_t, b_t, p, class_prob,rc_image,mu,logvar = self.model(x, l_t, h_t)
+                    h_t, l_t, b_t, p, class_prob,rc_image,mu,logvar,masks = self.model(x, l_t, h_t,masks=masks)
 
                     # store
                     locs.append(l_t[0:9])
@@ -258,8 +260,9 @@ class Trainer:
                     rc_images.append(rc_image)
                     muList.append(mu)
                     logvarList.append(logvar)
+                    masks_glimpse.append(masks.clone())
                 # last iteration
-                h_t, l_t, b_t, p,log_probas,rc_image,mu,logvar = self.model(x, l_t, h_t, last=True)
+                h_t, l_t, b_t, p,log_probas,rc_image,mu,logvar,masks = self.model(x, l_t, h_t, last=True,masks=masks)
 
                 muList.append(mu)
                 logvarList.append(logvar)
@@ -268,6 +271,7 @@ class Trainer:
                 locs.append(l_t[0:9])
                 class_probs.append(log_probas.detach())
                 rc_images.append(rc_image)
+                masks_glimpse.append(masks.clone())
                 # convert list to tensors and reshape
                 baselines = torch.stack(baselines).transpose(1, 0)
                 log_pi = torch.stack(log_pi).transpose(1, 0)
@@ -275,6 +279,7 @@ class Trainer:
                 muList = torch.stack(muList).transpose(1,0)
                 logvarList = torch.stack(logvarList).transpose(1,0)
                 rc_images = torch.stack(rc_images).transpose(1,0)
+                masks_glimpse = torch.stack(masks_glimpse).transpose(1,0)
                 # calculate the reward for correct classification
                 predicted = torch.max(log_probas, 1)[1]
                 R = (predicted.detach() == y).float()
@@ -312,8 +317,9 @@ class Trainer:
                 # sum up into a hybrid loss
 
                 x = x.unsqueeze(dim=1).repeat((1,self.num_glimpses,1,1,1))
-                loss = loss_action + loss_baseline + loss_reinforce * 0.01 + self.model.decoder.loss_function(rc_images,x,muList,logvarList)[0]
-
+                loss = loss_action + loss_baseline*self.critic_weight+ loss_reinforce * self.actor_weight
+                if self.vae_patience>epoch:
+                    loss+=self.model.decoder.loss_function(rc_images,x,muList,logvarList)[0]
 
                 # compute accuracy
                 correct = (predicted == y).float()
@@ -383,14 +389,14 @@ class Trainer:
             class_probs = []
             for t in range(self.num_glimpses - 1):
                 # forward pass through model
-                h_t, l_t, b_t, p, class_prob,_,_,_ = self.model(x, l_t, h_t)
+                h_t, l_t, b_t, p, class_prob,_,_,_,_ = self.model(x, l_t, h_t)
 
                 baselines.append(b_t)
                 log_pi.append(p)
                 class_probs.append(class_prob)
 
             # last iteration
-            h_t, l_t, b_t, p, log_probas,_ ,_,_= self.model(x, l_t, h_t, last=True)
+            h_t, l_t, b_t, p, log_probas,_ ,_,_,_= self.model(x, l_t, h_t, last=True)
             log_pi.append(p)
             baselines.append(b_t)
             class_probs.append(log_probas)
@@ -470,12 +476,12 @@ class Trainer:
             # extract the glimpses
             for t in range(self.num_glimpses - 1):
                 # forward pass through model
-                h_t, l_t, b_t, p,log_probas,rec_x,mu,logvar = self.model(x, l_t, h_t)
+                h_t, l_t, b_t, p,log_probas,rec_x,mu,logvar,_ = self.model(x, l_t, h_t)
                 testmu.append(mu)
                 testlogvar.append(logvar)
                 testrecx.append(rec_x)
             # last iteration
-            h_t, l_t, b_t,  p ,log_probas,rec_x,mu,logvar = self.model(x, l_t, h_t, last=True)
+            h_t, l_t, b_t,  p ,log_probas,rec_x,mu,logvar,_ = self.model(x, l_t, h_t, last=True)
             loss = self.model.decoder.reconstruction_error(x,rec_x)
             testrecx.append(rec_x)
             testrecx = torch.stack(testrecx).transpose(1,0)
