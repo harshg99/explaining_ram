@@ -461,6 +461,8 @@ class Trainer:
         # load the best checkpoint
         self.load_checkpoint(best=self.best)
         runningRecError = torch.zeros(self.num_glimpses)
+        pltimg = torch.zeros((28,28))
+        pltrecs = torch.zeros((28,28))
         for i, (x, y) in enumerate(self.test_loader):
             x, y = x.to(self.device), y.to(self.device)
             err = torch.zeros(self.num_glimpses)
@@ -489,17 +491,27 @@ class Trainer:
             # runningRecError = self.model.decoder.reconstruction_error(x,rec_x)
             testrecx = testrecx.view((testrecx.shape[0],testrecx.shape[1],-1))
             x = x.view((x.shape[0],x.shape[1],-1))
-            err = torch.mean(torch.norm((testrecx - x)**2,dim=-1),dim=0)
+            err = torch.mean(torch.norm((testrecx - x),dim=-1)**2,dim=0)
             runningRecError += err
             log_probas = log_probas.view(self.M, -1, log_probas.shape[-1])
             log_probas = torch.mean(log_probas, dim=0)
 
             pred = log_probas.data.max(1, keepdim=True)[1]
             correct += pred.eq(y.data.view_as(pred)).cpu().sum()
+            if(i==len(self.test_loader)-1):
+                randidx = np.random.randint(0,10)
+                pltimg = x[randidx][-1].view(28,28)
+                pltrecs = testrecx[randidx][-1].view(28,28)
+                
 
-        plt.plot(runningRecError/len(self.test_loader))
-        plt.xlabel("Number of glimpses")
-        plt.ylabel("Reconstruction error")
+        # self.plot_reconstruction(pltimg,pltrecs)
+        ax1 = plt.subplot(121)
+        ax2 = plt.subplot(122)
+        ax1.imshow(pltimg.view(28,28),cmap='gray')
+        ax2.imshow(pltrecs.view(28,28),cmap='gray')
+        # plt.plot(runningRecError/len(self.test_loader))
+        # plt.xlabel("Number of glimpses")
+        # plt.ylabel("Reconstruction error")
         plt.show()
         perc = (100.0 * correct) / (self.num_test)
         error = 100 - perc
@@ -559,3 +571,15 @@ class Trainer:
             )
         else:
             print("[*] Loaded {} checkpoint @ epoch {}".format(filename, ckpt["epoch"]))
+    
+    def plot_reconstruction(self,img,rec):
+        img = img.view(28,28)
+        plt.imshow(img,cmap="gray")
+        rec = rec[-1].view(28,28)
+        # f = plt.figure(figsize=(15,5))
+        # ax1 = f.add_subplot(121)
+        # ax2 = f.add_subplot(122)
+        ax1 = plt.subplot(121)
+        ax2 = plt.subplot(122)
+        ax1.imshow(img,cmap='gray')
+        ax2.imshow(rec,cmap='gray')

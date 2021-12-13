@@ -263,7 +263,7 @@ class Decoder(nn.Module):
 
     def reparameterization(self, mean, log_var):
         std = torch.exp(0.5 * log_var)
-        eps = torch.normal(0, 0.001, size=(std.size())).to(self.device)
+        eps = torch.normal(0, 0.1, size=(std.size())).to(self.device)
         z = mean + std * eps
         return z
 
