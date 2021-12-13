@@ -330,7 +330,7 @@ class PartialDecoder(nn.Module):
 
     def reparameterization(self, mean, log_var):
         std = torch.exp(0.5 * log_var)
-        eps = torch.normal(0, 0.001, size=(std.size())).to(self.device)
+        eps = torch.normal(0, 0.1, size=(std.size())).to(self.device)
         z = mean + std * eps
         return z
 
@@ -359,9 +359,9 @@ class PartialDecoder(nn.Module):
         Compute reconstruction loss and KL divergence loss mentioned in pdf handout
         '''
         recon_x = recon_x.reshape(x.shape)
-        bce_loss = nn.BCELoss(reduction='mean')
+        bce_loss = nn.BCELoss(reduction='sum')
         BCE = bce_loss(self.masks.to(self.device)*recon_x.to(self.device), self.masks.to(self.device)*x.to(self.device))
         KLD = -0.5 * torch.sum(-torch.exp(log_var) + log_var + 1 - mu**2)
         totalloss = BCE + KLD
-
+        print(BCE,KLD)
         return totalloss, KLD.detach().item(), BCE.detach().item()
