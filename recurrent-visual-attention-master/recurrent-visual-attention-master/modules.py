@@ -292,7 +292,7 @@ class Decoder(nn.Module):
         Compute reconstruction loss and KL divergence loss mentioned in pdf handout
         '''
         recon_x = recon_x.reshape(x.shape)
-        bce_loss = nn.BCELoss(reduction='mean')
+        bce_loss = nn.BCELoss(reduction='sum')
         BCE = bce_loss(recon_x.to(self.device), x.to(self.device))
         KLD = -0.5 * torch.sum(-torch.exp(log_var) + log_var + 1 - mu**2)
         totalloss = BCE + KLD
