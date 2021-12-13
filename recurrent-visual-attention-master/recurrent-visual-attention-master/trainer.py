@@ -218,6 +218,7 @@ class Trainer:
         batch_time = AverageMeter()
         losses = AverageMeter()
         accs = AverageMeter()
+        vaelosses = AverageMeter()
 
         tic = time.time()
         with tqdm(total=self.num_train) as pbar:
@@ -319,7 +320,9 @@ class Trainer:
                 x = x.unsqueeze(dim=1).repeat((1,self.num_glimpses,1,1,1))
                 loss = loss_action + loss_baseline*self.critic_weight+ loss_reinforce * self.actor_weight
                 if self.vae_patience>epoch:
-                    loss+=self.model.decoder.loss_function(rc_images,x,muList,logvarList)[0]
+                    vae_loss = self.model.decoder.loss_function(rc_images,x,muList,logvarList)[0]
+                    vaelosses.update(vae_loss.item(),x.size()[0])
+                    vae_loss.backward(retain_graph=True)
 
                 # compute accuracy
                 correct = (predicted == y).float()
@@ -363,6 +366,7 @@ class Trainer:
                     self.writer.add_scalar("train_loss", losses.avg, iteration)
                     self.writer.add_scalar("train_acc", accs.avg, iteration)
                     self.writer.add_scalar("reconstrunction_loss",self.model.decoder.reconstruction_error(rc_images,x),iteration)
+                    self.writer.add_scalar("vae loss",vaelosses.avg,iteration)
 
             return losses.avg, accs.avg
 
