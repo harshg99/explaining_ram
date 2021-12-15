@@ -492,10 +492,15 @@ class Trainer:
         glimpses = torch.zeros((6,784))
         for i, (x, y) in enumerate(self.test_loader):
             x, y = x.to(self.device), y.to(self.device)
+            if (self.data_type == "mnist-clut"):
+                x_orig = x[1]
+                x = x[0]
+                x_orig = x_orig.to(self.device)
             err = torch.zeros(self.num_glimpses)
             # duplicate M times
             x = x.repeat(self.M, 1, 1, 1)
-
+            if (self.data_type == "mnist-clut"):
+                x_orig = x_orig.repeat(self.M, 1, 1, 1)
             # initialize location vector and hidden state
             self.batch_size = x.shape[0]
             h_t, l_t = self.reset()
@@ -511,14 +516,28 @@ class Trainer:
                 testrecx.append(rec_x)
             # last iteration
             h_t, l_t, b_t,  p ,log_probas,rec_x,mu,logvar,_ = self.model(x, l_t, h_t, last=True)
-            loss = self.model.decoder.reconstruction_error(x,rec_x)
+
+            if (self.data_type == "mnist-clut"):
+                loss = self.model.decoder.reconstruction_error(x_orig, rec_x)
+            else:
+                loss = self.model.decoder.reconstruction_error(x, rec_x)
             testrecx.append(rec_x)
             testrecx = torch.stack(testrecx).transpose(1,0)
-            x = x.unsqueeze(dim=1).repeat((1,self.num_glimpses,1,1,1))
+
+            if (self.data_type == "mnist-clut"):
+                x_orig = x_orig.unsqueeze(dim=1).repeat((1, self.num_glimpses, 1, 1, 1))
+            else:
+                x = x.unsqueeze(dim=1).repeat((1, self.num_glimpses, 1, 1, 1))
+
             # runningRecError = self.model.decoder.reconstruction_error(x,rec_x)
             testrecx = testrecx.view((testrecx.shape[0],testrecx.shape[1],-1))
             x = x.view((x.shape[0],x.shape[1],-1))
-            err = torch.mean(torch.norm((testrecx - x),dim=-1)**2,dim=0)
+
+            if (self.data_type == "mnist-clut"):
+                err = torch.mean(torch.norm((testrecx - x_orig),dim=-1)**2,dim=0)
+            else:
+                err = torch.mean(torch.norm((testrecx - x),dim=-1)**2,dim=0)
+
             runningRecError += err
             log_probas = log_probas.view(self.M, -1, log_probas.shape[-1])
             log_probas = torch.mean(log_probas, dim=0)
