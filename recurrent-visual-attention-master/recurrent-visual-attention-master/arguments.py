@@ -1,5 +1,5 @@
 # Architecture level Params: Soft attention Model
-mode = "HardAttRewardShaping" # HardAtt, HardAttLSTM,HardAttwRewardShaping, HardAttAC2 HardAttAC2RewardShaping HardAttAC2LSTMRewardShaping
+mode = "HardAtt" # HardAtt, HardAttLSTM,HardAttwRewardShaping, HardAttAC2 HardAttAC2RewardShaping HardAttAC2LSTMRewardShaping
 
 if mode=="HardAtt":
     core_net_type="Linear"
@@ -88,6 +88,7 @@ vae_patience = 20 #epochs for traininig vae
 use_gpu = True #Whether to run on the GPU
 best = True#Load best model or most recent for testing
 random_seed = 1 #Seed to ensure reproducibility
+data_type = 'mnist-clut'
 data_dir = "./data" #Directory in which data is stored
 ckpt_dir ="./ckpt" #Directory in which to save model checkpoints
 logs_dir = "./logs/" #"Directory in which Tensorboard logs wil be stored
@@ -97,7 +98,7 @@ print_freq = 10 #How frequently to print training details",
 plot_freq = 1 #How frequently to plot glimpses
 
 # Name of the model
-version = "vr2"
+version = "vmnistclut1"
 model_name = "ram_{}_{}x{}_{}_{}_m{}v_{}".format(
     num_glimpses, patch_size, patch_size, glimpse_scale,num_patches,mode,version
 )

@@ -92,6 +92,7 @@ class Trainer:
         self.print_freq = config.print_freq
         self.plot_freq = config.plot_freq
         self.model_name = config.model_name
+        self.data_type = config.data_type
 
         self.plot_dir = "./plots/" + self.model_name + "/"
         if not os.path.exists(self.plot_dir):
@@ -224,7 +225,10 @@ class Trainer:
         with tqdm(total=self.num_train) as pbar:
             for i, (x, y) in enumerate(self.train_loader):
                 self.optimizer.zero_grad()
-
+                if(self.data_type=="mnist-clut"):
+                    x_orig = x[1]
+                    x = x[0]
+                    x_orig = x_orig.to(self.device)
                 x, y = x.to(self.device), y.to(self.device)
 
                 plot = False
@@ -316,11 +320,18 @@ class Trainer:
                     loss_reinforce = torch.mean(loss_reinforce,dim=0)
 
                 # sum up into a hybrid loss
-
-                x = x.unsqueeze(dim=1).repeat((1,self.num_glimpses,1,1,1))
+                if self.data_type=="mnist-clut":
+                    x_orig = x_orig.unsqueeze(dim=1).repeat((1, self.num_glimpses, 1, 1, 1))
+                else:
+                    x = x.unsqueeze(dim=1).repeat((1, self.num_glimpses, 1, 1, 1))
                 loss = loss_action + loss_baseline*self.critic_weight+ loss_reinforce * self.actor_weight
-                if self.vae_patience>epoch:
-                    vae_loss = self.model.decoder.loss_function(rc_images,x,muList,logvarList)[0]
+
+                if self.vae_patience<=epoch:
+                    if (self.data_type == "mnist-clut"):
+                        vae_loss = self.model.decoder.loss_function(rc_images, x_orig, muList, logvarList)[0]
+                    else:
+                        vae_loss = self.model.decoder.loss_function(rc_images, x, muList, logvarList)[0]
+
                     vaelosses.update(vae_loss.item(),x.size()[0])
                     vae_loss.backward(retain_graph=True)
 
@@ -365,7 +376,11 @@ class Trainer:
                     iteration = epoch * len(self.train_loader) + i
                     self.writer.add_scalar("train_loss", losses.avg, iteration)
                     self.writer.add_scalar("train_acc", accs.avg, iteration)
-                    self.writer.add_scalar("reconstrunction_loss",self.model.decoder.reconstruction_error(rc_images,x),iteration)
+                    if (self.data_type == "mnist-clut"):
+                        self.writer.add_scalar("reconstrunction_loss",
+                                               self.model.decoder.reconstruction_error(rc_images, x_orig), iteration)
+                    else:
+                        self.writer.add_scalar("reconstrunction_loss",self.model.decoder.reconstruction_error(rc_images,x),iteration)
                     self.writer.add_scalar("vae loss",vaelosses.avg,iteration)
 
             return losses.avg, accs.avg
@@ -378,6 +393,10 @@ class Trainer:
         accs = AverageMeter()
 
         for i, (x, y) in enumerate(self.valid_loader):
+            if (self.data_type == "mnist-clut"):
+                x_orig = x[1]
+                x = x[0]
+                x_orig = x_orig.to(self.device)
             x, y = x.to(self.device), y.to(self.device)
 
             # duplicate M times
@@ -451,6 +470,7 @@ class Trainer:
                 self.writer.add_scalar("val_loss", losses.avg, iteration)
                 self.writer.add_scalar("val_acc", accs.avg, iteration)
 
+
         return losses.avg, accs.avg
 
     @torch.no_grad()
@@ -467,6 +487,7 @@ class Trainer:
         runningRecError = torch.zeros(self.num_glimpses)
         pltimg = torch.zeros((28,28))
         pltrecs = torch.zeros((28,28))
+        glimpses = torch.zeros((6,784))
         for i, (x, y) in enumerate(self.test_loader):
             x, y = x.to(self.device), y.to(self.device)
             err = torch.zeros(self.num_glimpses)
@@ -502,20 +523,18 @@ class Trainer:
 
             pred = log_probas.data.max(1, keepdim=True)[1]
             correct += pred.eq(y.data.view_as(pred)).cpu().sum()
+            #Randomly generating image to take glimpses about
             if(i==len(self.test_loader)-1):
-                randidx = np.random.randint(0,10)
-                pltimg = x[randidx][-1].view(28,28)
-                pltrecs = testrecx[randidx][-1].view(28,28)
-                
+                pltimg = x
+                glimpses = testrecx
+        
+        self.save_recs(2,pltimg,glimpses,"HardAttwShapingMNIST") #Saves the glimses in ./report
 
-        # self.plot_reconstruction(pltimg,pltrecs)
-        ax1 = plt.subplot(121)
-        ax2 = plt.subplot(122)
-        ax1.imshow(pltimg.view(28,28),cmap='gray')
-        ax2.imshow(pltrecs.view(28,28),cmap='gray')
-        # plt.plot(runningRecError/len(self.test_loader))
-        # plt.xlabel("Number of glimpses")
-        # plt.ylabel("Reconstruction error")
+        #For reconstruction error, change file name if runnign another model
+        np.save("./report/Reconstruction_hardAttwReshaping",runningRecError/len(self.test_loader))
+        plt.plot(runningRecError/len(self.test_loader))
+        plt.xlabel("Number of glimpses")
+        plt.ylabel("Reconstruction error")
         plt.show()
         perc = (100.0 * correct) / (self.num_test)
         error = 100 - perc
@@ -576,14 +595,38 @@ class Trainer:
         else:
             print("[*] Loaded {} checkpoint @ epoch {}".format(filename, ckpt["epoch"]))
     
-    def plot_reconstruction(self,img,rec):
-        img = img.view(28,28)
-        plt.imshow(img,cmap="gray")
-        rec = rec[-1].view(28,28)
-        # f = plt.figure(figsize=(15,5))
-        # ax1 = f.add_subplot(121)
-        # ax2 = f.add_subplot(122)
-        ax1 = plt.subplot(121)
-        ax2 = plt.subplot(122)
-        ax1.imshow(img,cmap='gray')
-        ax2.imshow(rec,cmap='gray')
+    def save_recs(self,n,img,glimpses_data,mode,saveLast=False,show=False):
+        #Plotting glimpses, if show is true, it will print all samples
+        for i in range(n):
+            idx = np.random.randint(0,len(glimpses_data))
+            org = img[idx][-1]
+            glimpses = glimpses_data[idx]
+            if(saveLast):
+                ax1 = plt.subplot(121)
+                ax2 = plt.subplot(122)
+                ax1.imshow(org.view(28,28),cmap='gray')
+                ax2.imshow(glimpses[-1].view(28,28),cmap='gray')
+
+            else:
+                ax0g = plt.subplot(171)
+                ax1g = plt.subplot(172)
+                ax2g = plt.subplot(173)
+                ax3g = plt.subplot(174)
+                ax4g = plt.subplot(175)
+                ax5g = plt.subplot(176)
+                ax6g = plt.subplot(177)
+
+                ax0g.imshow(org.view(28,28),cmap='gray')
+                ax1g.imshow(glimpses[0].view(28,28),cmap='gray')
+                ax2g.imshow(glimpses[1].view(28,28),cmap='gray')
+                ax3g.imshow(glimpses[2].view(28,28),cmap='gray')
+                ax4g.imshow(glimpses[3].view(28,28),cmap='gray')
+                ax5g.imshow(glimpses[4].view(28,28),cmap='gray')
+                ax6g.imshow(glimpses[5].view(28,28),cmap='gray')
+            plt.savefig('./report/'+mode+'_glimpses_{0}.jpg'.format(i)) #CHANGE NAME IF PLOTTING SOME OTHER MODE
+            
+            if(show):
+                plt.show()
+            plt.close()
+
+

@@ -19,19 +19,36 @@ def main(config):
 
     # instantiate data loaders
     if config.is_train:
-        dloader = data_loader.get_train_valid_loader(
-            config.data_dir,
-            config.batch_size,
-            config.random_seed,
-            config.valid_size,
-            config.shuffle,
-            config.show_sample,
-            **kwargs,
-        )
+        if config.data_type=='mnist-clut':
+            dloader = data_loader.get_train_valid_loader_mnist_clut(
+                config.data_dir+"/mnistclut/",
+                config.batch_size,
+                config.random_seed,
+                config.valid_size,
+                config.shuffle,
+                config.show_sample,
+                **kwargs,
+            )
+        else:
+            dloader = data_loader.get_train_valid_loader(
+                config.data_dir,
+                config.batch_size,
+                config.random_seed,
+                config.valid_size,
+                config.shuffle,
+                config.show_sample,
+                **kwargs,
+            )
     else:
-        dloader = data_loader.get_test_loader(
-            config.data_dir, config.batch_size, **kwargs,
-        )
+        if config.data_type == 'mnist-clut':
+            dloader = data_loader.get_test_loader_mnist_clut(
+                config.data_dir+"/mnistclut/", config.batch_size, **kwargs,
+            )
+
+        else:
+            dloader = data_loader.get_test_loader(
+                config.data_dir, config.batch_size, **kwargs,
+            )
 
     trainer = Trainer(config, dloader)
 

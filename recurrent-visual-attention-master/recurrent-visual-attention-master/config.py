@@ -174,6 +174,9 @@ misc_arg.add_argument(
     "--data_dir", type=str, default=data_dir, help="Directory in which data is stored"
 )
 misc_arg.add_argument(
+    "--data_type", type=str, default=data_type, help="Directory in which data is stored"
+)
+misc_arg.add_argument(
     "--ckpt_dir",
     type=str,
     default=ckpt_dir,
