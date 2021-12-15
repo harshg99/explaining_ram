@@ -326,11 +326,13 @@ class Trainer:
                     x = x.unsqueeze(dim=1).repeat((1, self.num_glimpses, 1, 1, 1))
                 loss = loss_action + loss_baseline*self.critic_weight+ loss_reinforce * self.actor_weight
 
+
                 if self.vae_patience<=epoch:
                     if (self.data_type == "mnist-clut"):
                         vae_loss = self.model.decoder.loss_function(rc_images, x_orig, muList, logvarList)[0]
                     else:
                         vae_loss = self.model.decoder.loss_function(rc_images, x, muList, logvarList)[0]
+
 
                     vaelosses.update(vae_loss.item(),x.size()[0])
                     vae_loss.backward(retain_graph=True)
@@ -628,5 +630,6 @@ class Trainer:
             if(show):
                 plt.show()
             plt.close()
+
 
 

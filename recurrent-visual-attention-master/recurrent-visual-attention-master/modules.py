@@ -364,4 +364,5 @@ class PartialDecoder(nn.Module):
         KLD = -0.5 * torch.sum(-torch.exp(log_var) + log_var + 1 - mu**2)
         totalloss = BCE + KLD
         #print(BCE,KLD)
+
         return totalloss, KLD.detach().item(), BCE.detach().item()
