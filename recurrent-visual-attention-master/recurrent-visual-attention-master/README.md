@@ -67,3 +67,4 @@ python main.py --is_train=False
 
 
 - [Torch Blog Post on RAM](http://torch.ch/blog/2015/09/21/rmva.html)
+- https://proceedings.neurips.cc/paper/2014/file/09c6c3783b4a70054da74f2538ed47c6-Paper.pdf
