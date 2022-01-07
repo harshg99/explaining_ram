@@ -1,4 +1,5 @@
-## The code has been adapted from https://github.com/kevinzakka/recurrent-visual-attention
+## Explaining Recurrent Attention Models
+(The code has been adapted from https://github.com/kevinzakka/recurrent-visual-attention)
 
 
 The *Recurrent Attention Model* (RAM) is a neural network that processes inputs sequentially, attending to different locations within the image one at a time, and incrementally combining information from these fixations to build up a dynamic internal representation of the image.
